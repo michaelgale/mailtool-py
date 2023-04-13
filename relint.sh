@@ -1,2 +1,2 @@
 black mailtool/*.py
-black tests/*.py
+black mailtool/scripts/*.py

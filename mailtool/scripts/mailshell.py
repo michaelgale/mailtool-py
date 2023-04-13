@@ -22,6 +22,7 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import argparse
+from argparse import RawDescriptionHelpFormatter
 from datetime import date, timedelta, datetime
 
 from rich import print
@@ -30,9 +31,37 @@ from toolbox import *
 from mailtool import *
 
 
+DESC = """
+Access multiple IMAP mail accounts for showing filtered views of email and downloading
+email attachments.
+"""
+
+EPILOG = """
+A YAML file describing email account names, URLs and credentials must be available
+at the path specified by the environment variable MAILTOOL_CFG_FILE.  The format
+of the YAML file is:
+
+account1name:
+  url: mail.account1.com
+  username: person@account1.com
+  password: theP@ssw0rd
+
+account2name:
+  url: mail.account2.org
+  username: otherperson@account2.org
+  password: otherP@$$w0rD
+
+etc.
+"""
+
+
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-a", "--account", default="all", help="Mail account name")
+    parser = argparse.ArgumentParser(
+        description=DESC, epilog=EPILOG, formatter_class=RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "-a", "--account", default="all", help="Mail account name (or all)"
+    )
     parser.add_argument(
         "-m", "--mailbox", default="INBOX", help="Mailbox folder name (default=INBOX)"
     )
@@ -176,6 +205,6 @@ def main():
                         show_name=argsd["name"],
                     )
 
+
 if __name__ == "__main__":
     main()
-
