@@ -23,7 +23,7 @@
 #
 # MailAttachment class
 
-from toolbox import safe_filename, split_filename, strip_rich_str, eng_units
+from toolbox import clean_filename, split_filename, strip_rich_str, eng_units
 from mailtool import *
 
 
@@ -109,13 +109,13 @@ class MailAttachment:
                         fn = ""
                     else:
                         fn = find_value(e[1], b"filename")
-                        fn = safe_filename(fn)
+                        fn = clean_filename(fn)
         if fn is not None and len(fn) == 0:
             for e in s:
                 if isinstance(e, tuple):
                     if e[0].lower() == b"name":
                         fn = str(e[1], encoding="ascii")
-                        fn = safe_filename(fn)
+                        fn = clean_filename(fn)
         if fn is not None and fn == "":
             return None
         return fn
