@@ -39,19 +39,25 @@ class MailAttachment:
     def __str__(self):
         s = self.colour_str()
         s = strip_rich_str(s)
-        s = s.replace(":newspaper:", "[]")
-        s = s.replace(":framed_picture: ", "[]")
+        s = s.replace(":closed_book:", "[]")
+        s = s.replace(":notebook_with_decorative_cover:", "[]")
+        s = s.replace(":camera: ", "[]")
+        s = s.replace(":calendar: ", "[]")
         s = s.replace(":compression: ", "[]")
         return s
 
     def colour_str(self):
         s = []
-        if self.is_document:
-            s.append(":newspaper: ")
-        if self.is_image:
-            s.append(":framed_picture:  ")
-        if self.is_archive:
+        if self.is_pdf:
+            s.append(":closed_book: ")
+        elif self.is_document:
+            s.append(":notebook_with_decorative_cover: ")
+        elif self.is_image:
+            s.append(":camera:  ")
+        elif self.is_archive:
             s.append(":compression:  ")
+        elif self.is_cal:
+            s.append(":calendar:  ")
         s.append(colour_file_str(self.filename, " "))
         s.append(colour_size_str(self.size))
         return "".join(s)
@@ -73,7 +79,15 @@ class MailAttachment:
 
     @property
     def is_document(self):
-        return any([self.ext == x for x in "docx doc pdf xls xlsx".split()])
+        return any([self.ext == x for x in "docx doc xls xlsx ppt pptx".split()])
+
+    @property
+    def is_pdf(self):
+        return any([self.ext == x for x in "pdf".split()])
+
+    @property
+    def is_cal(self):
+        return any([self.ext == x for x in "ics".split()])
 
     def write(self, fn=None):
         fn = fn if fn is not None else self.filename
