@@ -26,7 +26,7 @@
 import email
 import mimetypes
 
-from toolbox import str_from_mime_words, safe_filename, strip_rich_str
+from toolbox import str_from_mime_words, clean_filename, strip_rich_str
 from mailtool import *
 
 
@@ -180,7 +180,7 @@ class MailMessage:
         for part in msg.walk():
             if part.get_content_maintype() == "multipart":
                 continue
-            filename = safe_filename(part.get_filename())
+            filename = clean_filename(part.get_filename())
             if not filename:
                 ext = mimetypes.guess_extension(part.get_content_type())
                 if not ext:

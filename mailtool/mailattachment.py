@@ -23,7 +23,7 @@
 #
 # MailAttachment class
 
-from toolbox import clean_filename, split_filename, strip_rich_str, eng_units
+from toolbox import clean_filename, split_filename, strip_rich_str
 from mailtool import *
 
 

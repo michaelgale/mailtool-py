@@ -24,6 +24,7 @@
 import argparse
 from argparse import RawDescriptionHelpFormatter
 from datetime import date, timedelta, datetime
+import sys
 
 from rich import print
 
@@ -139,6 +140,9 @@ def main():
 
     args = parser.parse_args()
     argsd = vars(args)
+    if len(sys.argv) == 1:
+        parser.print_usage()
+        exit()
 
     search_dict = {}
     if argsd["days"]:
