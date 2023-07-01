@@ -137,6 +137,20 @@ def main():
         default=False,
         help="List unreplied messages",
     )
+    parser.add_argument(
+        "-r",
+        "--rules",
+        action="store_true",
+        default=False,
+        help="Show automated account rules",
+    )
+    parser.add_argument(
+        "-x",
+        "--dryrun",
+        action="store_true",
+        default=False,
+        help="Don't perform automated rules, just show rule processing as a dry run",
+    )
 
     args = parser.parse_args()
     argsd = vars(args)
@@ -174,6 +188,7 @@ def main():
         accounts = [argsd["account"]]
 
     for account in accounts:
+        print("Processing mail account: [#80FFC0 bold]%s[/]" % (account))
         if argsd["folders"]:
             m = MailAccount(account_name=account)
             for folder in m.folders:
@@ -181,8 +196,15 @@ def main():
                     "Mailbox : [#80FFC0 bold]%s[/] [white]/[/] [#20C040]%s[/]"
                     % (account, folder)
                 )
+        if argsd["rules"]:
+            rules = MailSession.get_account_rules(account)
+            if rules is not None:
+                m = MailAccount(account)
+                m.process_rules(dryrun=argsd["dryrun"])
+            else:
+                print("No automated rules are defined")
 
-        if len(search_dict) > 0:
+        if search_dict is not None and not argsd["folders"] and not argsd["rules"]:
             m = MailAccount(account_name=account)
             show_attach = any(
                 [x in search_dict for x in ["attachments", "no_attachments"]]
@@ -196,15 +218,15 @@ def main():
                     "Mailbox : [#80FFC0 bold]%s[/] [white]/[/] [#20C040]%s[/]"
                     % (account, folder)
                 )
-                uids = m.get_messages(folder, **search_dict)
+                uids = m.get_message_uids(folder, search_dict)
                 if argsd["unique"]:
                     m.unique_senders(uids, folder)
                 elif argsd["output"]:
                     m.download_attachments(uids, folder)
                 else:
+                    objs = m.get_message_objs(uids, folder, show_attach)
                     m.print_messages(
-                        uids,
-                        folder,
+                        objs,
                         show_attachments=show_attach,
                         show_name=argsd["name"],
                     )

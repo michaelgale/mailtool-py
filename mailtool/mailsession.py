@@ -67,3 +67,15 @@ class MailSession:
     @staticmethod
     def get_accounts():
         return [k for k in MAILTOOL_ACCOUNTS.keys()]
+
+    @staticmethod
+    def get_account_rules(account):
+        if not account in MAILTOOL_ACCOUNTS:
+            raise UnknownAccountNameException
+        a = MAILTOOL_ACCOUNTS[account]
+        if "rules" in a:
+            rules = a["rules"]
+            if not isinstance(rules, list):
+                rules = [rules]
+            return [os.path.expanduser(f) for f in rules]
+        return None

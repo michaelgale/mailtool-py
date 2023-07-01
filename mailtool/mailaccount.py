@@ -25,16 +25,23 @@
 
 from collections import defaultdict
 from datetime import date, timedelta, datetime
+import time
 
 from rich import print
 
 from toolbox import ymd_from_date_spec
 from mailtool import *
+from .helpers import ADDRESS_COLOUR
 
 
 def listify(obj):
+    if isinstance(obj, str):
+        ls = obj.split()
+        if len(ls) > 1:
+            return ls
+        return [obj]
     if not isinstance(obj, (list)):
-        return [(obj)]
+        return [obj]
     return obj
 
 
@@ -72,6 +79,21 @@ class MailAccount:
     def folder_count(self):
         return len(self.folders)
 
+    def create_folder(self, folder_name):
+        with MailSession(account_name=self.name) as session:
+            session.create_folder(folder_name)
+            self._folders = None
+
+    def rename_folder(self, folder_name, new_name):
+        with MailSession(account_name=self.name) as session:
+            session.rename_folder(folder_name, new_name)
+            self._folders = None
+
+    def remove_folder(self, folder_name):
+        with MailSession(account_name=self.name) as session:
+            session.delete_folder(folder_name)
+            self._folders = None
+
     def _get_message_ids(self, folder_name, unread=False):
         uids = []
         with MailSession(account_name=self.name) as session:
@@ -100,14 +122,6 @@ class MailAccount:
         spec_vals,
         unread_only=False,
     ):
-        def _invert_vals(k, v):
-            vl = []
-            vs = []
-            vs.append(k)
-            vs.append(v)
-            vl.append(vs)
-            return vl
-
         uids = []
         with MailSession(account_name=self.name) as session:
             session.select_folder(folder_name, readonly=True)
@@ -116,9 +130,8 @@ class MailAccount:
             vals = listify(spec_vals)
             for spec, val in zip(specs, vals):
                 if "NOT" in spec:
-                    keys = spec.split()
                     criteria.append(str.encode("NOT"))
-                    criteria.append(_invert_vals(str.encode(keys[1]), val))
+                    criteria.append([str.encode(specs[1]), val])
                 elif "UNANSWERED" in spec:
                     criteria.append(str.encode("UNANSWERED"))
                 else:
@@ -183,24 +196,37 @@ class MailAccount:
             folder_name, recipients, "TO", unread_only=unread_only
         )
 
-    def get_messages(self, folder_name, **kwargs):
+    def get_message_uids(self, folder_name, searchspec, merge="or"):
         """Get messages from mail folder with criteria in a dictionary such as:
         { "senders": "info@mail.com", "since": date(2000, 6, 30), "unread": True }
         valid keys: senders, recipients, since, before, unread, subject
         """
         uids = set()
         unread_only = False
-        if "unread" in kwargs:
-            unread_only = kwargs["unread"]
-            if len(kwargs) == 1:
+        if "unread" in searchspec:
+            unread_only = searchspec["unread"]
+            if len(searchspec) == 1:
                 new_uids = self.get_unread_ids(folder_name)
                 uids.update(new_uids)
-        for k, v in kwargs.items():
+        elif len(searchspec) == 0:
+            new_uids = self.get_all_message_ids(folder_name)
+            uids.update(new_uids)
+        first = True
+        for k, v in searchspec.items():
             new_uids = []
             if k == "senders":
-                new_uids = self.get_messages_from(
-                    folder_name, v, unread_only=unread_only
-                )
+                if ">>" in v:
+                    all_uids = self.get_all_message_ids(folder_name)
+                    objs = self.get_message_objs(all_uids, folder_name)
+                    for msg in objs:
+                        ms = msg.address.split("@")
+                        if len(ms) == 2:
+                            if len(ms[1]) > 32:
+                                new_uids.append(msg.uid)
+                else:
+                    new_uids = self.get_messages_from(
+                        folder_name, v, unread_only=unread_only
+                    )
             elif "not_senders" in k:
                 new_uids = self._get_messages_with_specs(
                     folder_name, "NOT FROM", v, unread_only=unread_only
@@ -234,16 +260,23 @@ class MailAccount:
                 )
             else:
                 continue
+
             if len(uids) > 0:
-                uids = uids.intersection(new_uids)
-            else:
+                if merge == "and":
+                    uids = uids.intersection(new_uids)
+                else:
+                    uids.update(new_uids)
+            elif merge == "or" or len(searchspec) == 1:
+                uids.update(new_uids)
+            elif first and len(new_uids) > 0:
                 uids.update(new_uids)
             # print(
-            #     "search key %s found %d items interesecting to %d items"
-            #     % (k, len(new_uids), len(uids))
+            #     "search key %s(%s) found %d items interesecting (%s) to %d items"
+            #     % (k, v, len(new_uids), merge, len(uids))
             # )
+            first = False
         uids = list(uids)
-        for k, v in kwargs.items():
+        for k, v in searchspec.items():
             if k == "attachments":
                 uids = self.messages_with_attachments(uids, folder_name)
             elif k == "no_attachments":
@@ -310,24 +343,28 @@ class MailAccount:
                 print(msg.colour_str(show_attachments=True))
                 msg.download_attachment()
 
-    def print_messages(
-        self, uids, from_folder, show_id=False, show_attachments=False, show_name=False
-    ):
+    def get_message_objs(self, uids, from_folder, include_attach=False):
         if uids is None or len(uids) < 1:
             return
+        objs = []
         with MailSession(account_name=self.name) as session:
             session.select_folder(from_folder, readonly=True)
             keys = FETCH_KEYS
-            if show_attachments:
+            if include_attach:
                 keys.append("BODY.PEEK[]")
             for msgid, data in session.fetch(uids, keys).items():
                 msg = MailMessage.from_data(msgid, data)
-                print(
-                    msg.colour_str(
-                        show_attachments=show_attachments, show_name=show_name
-                    )
-                )
-            print("%d messages" % (len(uids)))
+                objs.append(msg)
+        return objs
+
+    def print_messages(self, msgs, show_attachments=False, show_name=False):
+        if msgs is None:
+            return
+        for msg in msgs:
+            print(
+                msg.colour_str(show_attachments=show_attachments, show_name=show_name)
+            )
+        print("%d messages" % (len(msgs)))
 
     def unique_senders(self, uids, from_folder, show_id=False):
         if uids is None or len(uids) < 1:
@@ -339,5 +376,73 @@ class MailAccount:
                 msg = MailMessage.from_data(msgid, data)
                 senders[msg.address] += 1
         for k, v in sorted(senders.items(), key=lambda kv: kv[1], reverse=False):
-            print("%3d messages from %s" % (v, k))
+            print("%3d messages from [%s]%s[/]" % (v, ADDRESS_COLOUR, k))
         print("%d messages" % (len(senders)))
+
+    def show_rules(self):
+        rulefile = MailSession.get_account_rules(self.name)
+        if rulefile is None:
+            return
+        rules = metayaml.read(rulefile, disable_order_dict=True)
+        print(rules)
+
+    def process_rules(self, dryrun=False):
+        rulefiles = MailSession.get_account_rules(self.name)
+        if rulefiles is None:
+            return
+        for rulefile in rulefiles:
+            print("  Processing rule file: %s" % (rulefile))
+            rules = metayaml.read(rulefile, disable_order_dict=True)
+            if not "rules" in rules:
+                continue
+            rules = rules["rules"]
+            num_rules = len(rules)
+            for i, rule in enumerate(rules):
+                if "move" in rule:
+                    print(
+                        "  Rule:[white]%3d / %-3d : Move to [%s]%s"
+                        % (i + 1, num_rules, FOLDER_COLOUR, rule["move"])
+                    )
+                elif "delete" in rule:
+                    print("  Rule:[white]%3d / %-3d : Delete" % (i + 1, num_rules))
+                search = {}
+                for k, v in rule.items():
+                    if any([k in SEARCH_KEYS]):
+                        search[k] = listify(v)
+                merge = "and"
+                if "merge" in rule:
+                    merge = rule["merge"]
+                if len(search) > 0:
+                    uids = self.get_message_uids("INBOX", search, merge=merge)
+                    if len(uids) > 0:
+                        msgs = self.get_message_objs(uids, "INBOX")
+                        for msg in msgs:
+                            print(msg.colour_str())
+                        if "move" in rule:
+                            if rule["move"] not in self.folders:
+                                if not dryrun:
+                                    print(
+                                        "  [yellow bold]:warning:[/] Creating new folder [%s]%s[/] since it is not on the mail server"
+                                        % (FOLDER_COLOUR, rule["move"])
+                                    )
+                                    self.create_folder(rule["move"])
+                                else:
+                                    print(
+                                        "  [yellow bold]:warning:[/] Would create new folder [%s]%s[/] since it is not on the mail server"
+                                        % (FOLDER_COLOUR, rule["move"])
+                                    )
+                            if not dryrun:
+                                self.move_messages(uids, "INBOX", rule["move"])
+                                # pace the IMAP actions with a sleep
+                                time.sleep(1.5)
+                                print("  Moved %d messages" % (len(uids)))
+                            else:
+                                print("  Would move %d messages" % (len(uids)))
+                        if "delete" in rule:
+                            if not dryrun:
+                                self.delete_messages(uids, "INBOX")
+                                # pace the IMAP actions with a sleep
+                                time.sleep(1.5)
+                                print("  Deleted %d messages" % (len(uids)))
+                            else:
+                                print("  Would delete %d messages" % (len(uids)))

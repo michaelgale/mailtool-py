@@ -5,7 +5,7 @@ import metayaml
 
 # fmt: off
 __project__ = 'mailtool'
-__version__ = '0.1.1'
+__version__ = '0.2.0'
 # fmt: on
 
 VERSION = __project__ + "-" + __version__
@@ -13,6 +13,18 @@ VERSION = __project__ + "-" + __version__
 script_dir = os.path.dirname(__file__)
 
 FETCH_KEYS = [b"UID", b"ENVELOPE", b"BODYSTRUCTURE", b"FLAGS"]
+
+SEARCH_KEYS = [
+    "senders",
+    "not_senders",
+    "recipients",
+    "since",
+    "before",
+    "date",
+    "subject",
+    "not_subject",
+    "not_replied",
+]
 
 from .helpers import (
     colour_address_str,
